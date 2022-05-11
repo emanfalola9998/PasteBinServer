@@ -28,7 +28,7 @@ client.connect();
 
 // get all pastes
 app.get("/pastes", async (req, res) => {
-  const result = await client.query('SELECT * FROM pastes LIMIT 10');
+  const result = await client.query('SELECT * FROM pastes ORDER BY time DESC LIMIT 10');
   res.json(result.rows);
 });
 
@@ -44,9 +44,9 @@ app.get("/pastes/:id", async(req,res) => {
 
 //post new paste
 app.post("/pastes", async (req,res) =>{
-  const {language, code} = req.body;
-  const text = 'INSERT INTO pastes (language, code) VALUES ($1, $2) RETURNING * ';
-  const value = [`${language}`, `${code}`];
+  const {language, code , title} = req.body;
+  const text = 'INSERT INTO pastes (language, code, title) VALUES ($1, $2 , $3) RETURNING * ';
+  const value = [`${language}`, `${code}`, `${title}`];
   const result = await client.query(text, value);
   const createdPaste = result.rows[0]
   res.status(201).json({
@@ -60,9 +60,9 @@ app.post("/pastes", async (req,res) =>{
 //edit existing paste
 app.put("/pastes/:id", async (req,res) =>{
   const id = parseInt(req.params.id)
-  const {language, code} = req.body;
-  const text = 'UPDATE pastes SET language = $1, code = $2 WHERE id = $3 RETURNING *';
-  const value = [`${language}`, `${code}`, `${id}`];
+  const {language, code, title} = req.body;
+  const text = 'UPDATE pastes SET language = $1, code = $2 , title = $4 WHERE id = $3 RETURNING *';
+  const value = [`${language}`, `${code}`, `${id}` , `${title}`];
   const result = await client.query(text, value);
 
   if (result.rowCount === 1){
@@ -104,7 +104,61 @@ app.delete("/pastes/:id", async (req, res) => {
   }
 })
 
+// get all comments
+app.get('/pastes/:id/comments', async (req, res) => {
+  const id = parseInt(req.params.id);
+  const text = 'SELECT comment, commentid FROM comments JOIN pastes ON (id = pasteid) WHERE pasteid = $1'
+  const value = [`${id}`]
+  const result = await client.query(text, value);
+  res.json(result.rows);
+});
+
+
+
+
+// add a new comment 
+
+app.post("/pastes/:id", async (req,res) =>{
+  const id = parseInt(req.params.id)
+  const {comments} = req.body;
+  const text = 'INSERT INTO comments (pasteid, comment) VALUES ((SELECT id FROM pastes WHERE id = $1), $2) RETURNING *';
+  const value = [`${id}`, `${comments}`];
+  const result = await client.query(text, value);
+  const createdComment = result.rows[0]
+  res.status(201).json({
+    status:"sucess",
+    data: {
+      comment: createdComment,
+    }
+  });
+});
+
+
+// delete an existing comment
+app.delete("/pastes/:id/comments/:commentid", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const commentid = parseInt(req.params.commentid)
+  const text = "DELETE FROM comments WHERE pasteid = $1 AND commentid = $2";
+  const value = [`${id}`, `${commentid}`];
+  const result = await client.query(text, value);
+
+  if (result.rowCount === 1) {
+    res.status(200).json({
+      status: "success",
+    });
+  } else {
+    res.status(404).json({
+      status: "fail",
+      data: {
+        id: "Could not find a paste with that id",
+      },
+    });
+  }
+})
+
 //Start the server on the given port
+
+
 const port = process.env.PORT;
 if (!port) {
   throw 'Missing PORT environment variable.  Set it in .env file.';
@@ -112,3 +166,5 @@ if (!port) {
 app.listen(port, () => {
   console.log(`Server is up and running on port ${port}`);
 });
+
+//
